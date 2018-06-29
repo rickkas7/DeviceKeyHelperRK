@@ -15,11 +15,11 @@
 // The size of the public and private keys depends on whether the device uses UDP (cellular devices, typically)
 // which use the ALT key slot, or TCP (Wi-Fi devices) which use the main key slot
 #if HAL_PLATFORM_CLOUD_UDP
-const size_t DEVICE_KEYS_HELPER_SIZE = DCT_ALT_DEVICE_PUBLIC_KEY_SIZE + DCT_ALT_DEVICE_PRIVATE_KEY_SIZE;
-const size_t DEVICE_KEYS_HELPER_OFFSET = DCT_ALT_DEVICE_PUBLIC_KEY_OFFSET;
+const size_t DEVICE_KEYS_HELPER_SIZE = DCT_ALT_DEVICE_PRIVATE_KEY_SIZE + DCT_ALT_DEVICE_PUBLIC_KEY_SIZE;
+const size_t DEVICE_KEYS_HELPER_OFFSET = DCT_ALT_DEVICE_PRIVATE_KEY_OFFSET;
 #else
-const size_t DEVICE_KEYS_HELPER_SIZE = DCT_DEVICE_PUBLIC_KEY_SIZE + DCT_DEVICE_PRIVATE_KEY_SIZE;
-const size_t DEVICE_KEYS_HELPER_OFFSET = DCT_DEVICE_PUBLIC_KEY_OFFSET;
+const size_t DEVICE_KEYS_HELPER_SIZE = DCT_DEVICE_PRIVATE_KEY_SIZE + DCT_DEVICE_PUBLIC_KEY_SIZE;
+const size_t DEVICE_KEYS_HELPER_OFFSET = DCT_DEVICE_PRIVATE_KEY_OFFSET;
 #endif
 
 /**
@@ -46,9 +46,19 @@ public:
 	/**
 	 * @brief Constructor
 	 *
-	 * @param load
+	 * @param load The load lambda or function
 	 *
-	 * @param save
+	 * @param save The save lambda or function
+	 *
+	 * The prototype of the load function is:
+	 *
+	 * bool load(DeviceKeyHelperSavedData *savedData)
+	 *
+	 * And save is:
+	 *
+	 * bool save(const DeviceKeyHelperSavedData *savedData)
+	 *
+	 * Both return true on success or false on error.
 	 */
 	DeviceKeyHelper(std::function<bool(DeviceKeyHelperSavedData *savedData)> load, std::function<bool(const DeviceKeyHelperSavedData *savedData)> save);
 	virtual ~DeviceKeyHelper();
@@ -85,13 +95,11 @@ protected:
 
 /**
  * @brief Class to save the keys in the emulated EEPROM
- *
- *
  */
 class DeviceKeyHelperEEPROM : public DeviceKeyHelper {
 public:
 	/**
-	 * @brief Store data in the onboard emulate EEPROM
+	 * @brief Store data in the onboard emulated EEPROM
 	 *
 	 * @param offset The offset to write to.
 	 *
@@ -100,7 +108,7 @@ public:
 	 * For cellular devices (Electron, E series): 328 bytes
 	 *
 	 * The emulated EEPROM on the Photon, P1, and Electron is 2047 bytes so storing Wi-Fi device
-	 * keys will se most of it.
+	 * keys will use most of it.
 	 */
 	inline DeviceKeyHelperEEPROM(size_t offset) :
 		DeviceKeyHelper([offset](DeviceKeyHelperSavedData *savedData) {
@@ -168,9 +176,13 @@ public:
 class DeviceKeyHelperSdFat : public DeviceKeyHelper {
 public:
 	/**
-	 * @brief Store data a SdFat SD card file system
+	 * @brief Store data a SdFat SD card file system using the SdFat library
 	 *
 	 * @param filename The filename to store the keys in
+	 *
+	 * This allows data to be stored on an SD card.
+	 *
+	 * https://github.com/greiman/SdFat-Particle
 	 */
 	inline DeviceKeyHelperSdFat(const char *filename) :
 		DeviceKeyHelper([filename](DeviceKeyHelperSavedData *savedData) {
@@ -228,12 +240,10 @@ public:
 	 */
 	inline DeviceKeyHelperFRAM(MB85RC256V &fram, size_t offset) :
 		DeviceKeyHelper([&fram, offset](DeviceKeyHelperSavedData *savedData) {
-			// Log.info("getting %u bytes at %u", sizeof(*savedData), offset);
 			fram.get(offset, *savedData);
 			return true;
 		},
 		[&fram, offset](const DeviceKeyHelperSavedData *savedData) {
-			// Log.info("saving %u bytes at %u", sizeof(*savedData), offset);
 			fram.put(offset, *savedData);
 			return true;
 		}) {
@@ -241,6 +251,57 @@ public:
 };
 #endif /* __MB85RC256V_FRAM_RK */
 
+#ifdef _FLASHEE_EEPROM_H_
+/**
+ * @brief Store data in a file using flashee-eeprom
+ *
+ * Include "flashee-eeprom.h" before DeviceHelperRK.h to enable this feature.
+ */
+class DeviceKeyHelperFlasheeFile : public DeviceKeyHelper {
+public:
+	/**
+	 * @brief Store data in a file in P1 external flash using flashee-eeprom
+	 *
+	 * @param filename the file to save to
+	 *
+	 * https://github.com/m-mcgowan/spark-flashee-eeprom/
+	 */
+	inline DeviceKeyHelperFlasheeFile(const char *filename) :
+		DeviceKeyHelper([filename](DeviceKeyHelperSavedData *savedData) {
+			FRESULT fResult;
+			FIL fil;
+			UINT dw;
+
+			fResult = f_open(&fil, filename, FA_READ | FA_OPEN_EXISTING);
+			if (fResult == FR_OK) {
+				fResult = f_read(&fil, savedData, sizeof(DeviceKeyHelperSavedData), &dw);
+
+				// Log.info("f_read fResult=%d dw=%d", fResult, dw);
+
+				f_close(&fil);
+			}
+
+			return (fResult == FR_OK);
+		},
+		[filename](const DeviceKeyHelperSavedData *savedData) {
+			FRESULT fResult;
+			FIL fil;
+			UINT dw;
+
+			fResult = f_open(&fil, filename, FA_WRITE | FA_CREATE_ALWAYS);
+			if (fResult == FR_OK) {
+				fResult = f_write(&fil, savedData, sizeof(DeviceKeyHelperSavedData), &dw);
+
+				// Log.info("f_write fResult=%d dw=%d", fResult, dw);
+
+				f_close(&fil);
+			}
+
+			return (fResult == FR_OK);
+		}) {
+	};
+};
+#endif /* _FLASHEE_EEPROM_H_ */
 
 
 #endif /* __DEVICEKEYHELPERRK_H */

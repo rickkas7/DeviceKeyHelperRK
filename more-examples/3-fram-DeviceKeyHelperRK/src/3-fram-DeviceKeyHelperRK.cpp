@@ -1,6 +1,6 @@
 #include "Particle.h"
 
-// Make sure you include SdFat.h before DeviceKeyHelperRK.h, otherwise you won't have support for SdFat
+// Make sure you include MB85RC256V-FRAM-RK.h before DeviceKeyHelperRK.h, otherwise you won't have support for MB85RC256V
 #include "MB85RC256V-FRAM-RK.h"
 
 
@@ -13,7 +13,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 SerialLogHandler logHandler;
 // SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 
-// MB85RC256V FRAM on Wire (D0/D1) with default address (A0 and A1 not connected, which have pull-downs
+// MB85RC256V FRAM on Wire (D0/D1) with default address (A0-A2 not connected, which have pull-downs
 // on the Adafruit breakout board)
 // - VCC to 3V3 (can also use VIN for a 5V I2C bus)
 // - GND to GND

@@ -8,16 +8,18 @@
 // Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-// Pick a debug level from one of these two:
-SerialLogHandler logHandler;
-// SerialLogHandler logHandler(LOG_LEVEL_TRACE);
+// Set a reasonable logging level:
+SerialLogHandler logHandler(LOG_LEVEL_WARN, { // Logging level for non-application messages
+    { "app", LOG_LEVEL_INFO }, // Default logging level for all application messages
+    { "app.spiffs", LOG_LEVEL_WARN } // Disable spiffs info and trace messages
+});
 
 // Chose a flash configuration:
 // SpiFlashISSI spiFlash(SPI, A2); 		// ISSI flash on SPI (A pins)
 // SpiFlashISSI spiFlash(SPI1, D5);		// ISSI flash on SPI1 (D pins)
-// SpiFlashMacronix spiFlash(SPI1, D5);	// Macronix flash on SPI1 (D pins), typical config for E series
+SpiFlashMacronix spiFlash(SPI1, D5);	// Macronix flash on SPI1 (D pins), typical config for E series
 // SpiFlashWinbond spiFlash(SPI, A2);	// Winbond flash on SPI (A pins)
-SpiFlashP1 spiFlash;					// P1 external flash inside the P1 module
+// SpiFlashP1 spiFlash;					// P1 external flash inside the P1 module
 
 // Create an object for the SPIFFS file system
 SpiffsParticle fs(spiFlash);

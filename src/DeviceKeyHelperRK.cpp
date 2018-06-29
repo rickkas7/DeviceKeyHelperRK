@@ -7,7 +7,7 @@
 
 #include "DeviceKeyHelperRK.h"
 
-Logger log("app.devicekeys");
+static Logger log("app.devicekeys");
 
 DeviceKeyHelper::DeviceKeyHelper(std::function<bool(DeviceKeyHelperSavedData *savedData)> load, std::function<bool(const DeviceKeyHelperSavedData *savedData)> save) :
 	load(load), save(save) {
@@ -20,6 +20,7 @@ DeviceKeyHelper::~DeviceKeyHelper() {
 void DeviceKeyHelper::check(bool forceSaveCurrentKey) {
 	// On TCP devices, this is 1600 bytes so it's kind of large to allocate on the stack safely, plus we need two of them.
 	// We deallocate it before exiting this function.
+
 	uint8_t *onDevice = new uint8_t[DEVICE_KEYS_HELPER_SIZE];
 	if (onDevice) {
 		DeviceKeyHelperSavedData *saved = new DeviceKeyHelperSavedData();
@@ -42,13 +43,12 @@ void DeviceKeyHelper::check(bool forceSaveCurrentKey) {
 					if (memcmp(onDevice, saved->keys, DEVICE_KEYS_HELPER_SIZE) != 0) {
 						// Changed
 						int res = dct_write_app_data(saved->keys, DEVICE_KEYS_HELPER_OFFSET, DEVICE_KEYS_HELPER_SIZE);
+
 						log.info("device keys changed! reverting offset=%u size=%u result=%d", DEVICE_KEYS_HELPER_OFFSET, DEVICE_KEYS_HELPER_SIZE, res);
 
-						dct_read_app_data_copy(DEVICE_KEYS_HELPER_OFFSET, onDevice, DEVICE_KEYS_HELPER_SIZE);
-						log.info("read data back: %s", memcmp(onDevice, saved->keys, DEVICE_KEYS_HELPER_SIZE) ? "did not match" : "verified");
-
-						// This delay is here because it keys reset should be rare, but if something goes wrong we don't want to go
+						// This delay is here because keys reset should be rare, but if something goes wrong we don't want to go
 						// into a fast rolling reboot because we could end up wearing out the flash.
+						// If you don't reset, then the change does not appear to take effect.
 						delay(5000);
 						System.reset();
 					}

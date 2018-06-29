@@ -1,22 +1,25 @@
 # Device Key Helper
 
+**Warning: This is an early development version of this code and there could still be bugs.**
+
+
 ## Background
 
 ### About public key cryptography
 
 Particle devices authenticate with the cloud using public key cryptography. Each side has a public key and a private key. The device private key is only stored on the device but the public key can be shared even over insecure channels. You can share it with everyone, even. The cloud knows every device's public key.
 
-For the cloud side, the cloud private key is kept secret, but all devices know the cloud public key. It's publicly available on a web site and in the Particle CLI source. The public key is not a secret.
+For the cloud side, the cloud private key is kept secret, but all devices know the cloud public key. It's publicly available on a web site and in the Particle CLI source. The cloud public key is not a secret.
 
 When a device handshakes, it encrypts some data using the device private key and the cloud public key. The cloud is able to decrypt this because it knows the cloud private key and the device public key (the opposite side). It then sends data back to the device encrypted with the cloud private key and the device public key.
 
-That data can only be decrypted by the device because decrypting it requires the cloud public key an the device private key, and only the device knows its private keys. 
+That data can only be decrypted by the device because decrypting it requires the cloud public key an the device private key, and only the device knows the device private key. 
 
 This process assures that the cloud is who it says it is, not a rogue cloud, because only the real cloud knows its private key. And the cloud knows the device is authentic, because only the device knows its private key.
 
 And a third-party snooping on the process can't gain anything because the private keys never leave the respective sides.
 
-This process requires a lot of computation, and is only used to authenticate both sides and set up a session key to encrypt the data for the connection using symmetric encryption like AES.
+This process requires a lot of computation, and is only used to authenticate both sides and set up a session key to encrypt the data for the connection using fast symmetric encryption like AES.
 
 ### The device key problem
 
@@ -34,7 +37,7 @@ If you've experienced this, you probably know that you fix this in DFU mode (bli
 particle keys doctor YOUR_DEVICE_ID
 ```
 
-What this does is upload your new device private key to the cloud, so they match again.
+What this does is upload your new device public key to the cloud, so they match again.
 
 ### Why can't the device just do it itself?
 
@@ -62,8 +65,403 @@ What if, instead of generating a new, incompatible device private key, you just 
 
 ### Why doesn't the device just do that itself?
 
-The device private key is kind of large and specific to each device. While there's a demo of storing it in the virtual EEPROM, that's not the best location as the ideal location is not in the STM32 flash. Also, it takes over a good chunk of the EEPROM.
+The device private key is kind of large and specific to each device. While there's a demo of storing it in the emulated EEPROM, that's not the best location as the ideal location is not in the STM32 flash. Also, it takes over a good chunk of the EEPROM.
 
 Ideally, this requires an external flash (SD card or SPI flash) or something like a FRAM. Since that's not standard equipment, it's not practical to include this in system firmware.
 
+### How it works
+
+You insert a few lines of code, typically in setup(). 
+
+If this is the first time you've run with the code, it will save the current key to your selected storage medium.
+
+On subsequent restarts, it will check the key against the saved one, and if it changed, it will put the other one back, then reset.
+
+
+### Simple Example
+
+The simple example in 1-simple-DeviceKeyHelperRK.cpp stores in EEPROM at a given location:
+
+```
+#include "Particle.h"
+
+#include "DeviceKeyHelperRK.h"
+
+// This is required, because we reset the keys during setup()
+SYSTEM_MODE(SEMI_AUTOMATIC);
+
+SerialLogHandler logHandler;
+
+void setup() {
+
+	// Not necessary, though provided here so you can see the serial log messages more easily
+	delay(4000);
+
+	// Save and restore the device keys in EEPROM at offset 100 in the EEPROM
+	DeviceKeyHelperEEPROM keyHelper(100);
+	keyHelper.check();
+
+	// Wait until the keys have possibly been restored before trying to connect.
+	// In SEMI_AUTOMATIC mode, connection retries and everything like that will
+	// work just like AUTOMATIC after you do the Particle.connect once, no need
+	// to manually manage the connection.
+	Particle.connect();
+}
+
+void loop() {
+
+}
+
+```
+
+The only real code is this:
+
+```
+	DeviceKeyHelperEEPROM keyHelper(100);
+	keyHelper.check();
+```
+
+This uses the built-in EEPROM emulation and saves and restores the keys to offset 100. 
+
+The size of the data depends on the type of device:
+
+- For Wi-Fi devices (Photon, P1): 1608 bytes
+- For cellular devices (Electron, E series): 328 bytes
+
+If you ever need to overwrite the currently saved key, you can do that by:
+
+```
+	keyHelper.check(true);
+```
+
+
+### SpiffsParticleRK
+
+The remaining examples are not in the examples directory because they depend on another library. To build, you can use Particle Dev (Atom IDE) or the Particle CLI to build the source in the more-examples directory. For example:
+
+```
+cd more-examples/1-SpiffsParticle-DeviceKeyHelperRK
+particle compile electron . --saveTo firmware.bin
+```
+
+The [SpiffsParticleRK](https://github.com/rickkas7/SpiffsParticleRK) library supports SPI-connected NOR flash chips. These are typically tiny 8-SOIC surface mount chips, intended to be included on your own circuit board. There are also breadboard adapters that are available, shown in the examples below.
+
+The chips are really inexpensive, less than US$0.50 in single quantities for a 1 Mbyte flash. They're available in sizes up to 16 Mbyte.
+
+SPI flash is less expensive than SD cards, and do not need an adapter or card slot. Of course they're not removable.
+
+The underlying [SpiFlashRK library](https://github.com/rickkas7/SpiFlashRK) library supports SPI NOR flash from
+
+- ISSI, such as a [IS25LQ080B](http://www.digikey.com/product-detail/en/issi-integrated-silicon-solution-inc/IS25LQ080B-JNLE/706-1331-ND/5189766).
+- Winbond, such as a [W25Q32](https://www.digikey.com/product-detail/en/winbond-electronics/W25Q32JVSSIQ/W25Q32JVSSIQ-ND/5803981).
+- Macronix, such as the [MX25L8006EM1I-12G](https://www.digikey.com/product-detail/en/macronix/MX25L8006EM1I-12G/1092-1117-ND/2744800)
+- The external 1 Mbyte flash on the P1 module.
+- Probably others.
+
+Using it just requires selecting the correct SPI flash chip and the filename to store the keys in:
+
+```
+#include "Particle.h"
+
+// Make sure you include SpiffsParticleRK.h before DeviceKeyHelperRK.h, otherwise you won't have support for SpiffsParticle
+#include "SpiffsParticleRK.h"
+
+#include "DeviceKeyHelperRK.h"
+
+// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
+SYSTEM_MODE(SEMI_AUTOMATIC);
+
+// Set a reasonable logging level:
+SerialLogHandler logHandler(LOG_LEVEL_WARN, { // Logging level for non-application messages
+    { "app", LOG_LEVEL_INFO }, // Default logging level for all application messages
+    { "app.spiffs", LOG_LEVEL_WARN } // Disable spiffs info and trace messages
+});
+
+// Chose a flash configuration:
+// SpiFlashISSI spiFlash(SPI, A2); 		// ISSI flash on SPI (A pins)
+// SpiFlashISSI spiFlash(SPI1, D5);		// ISSI flash on SPI1 (D pins)
+SpiFlashMacronix spiFlash(SPI1, D5);	// Macronix flash on SPI1 (D pins), typical config for E series
+// SpiFlashWinbond spiFlash(SPI, A2);	// Winbond flash on SPI (A pins)
+// SpiFlashP1 spiFlash;					// P1 external flash inside the P1 module
+
+// Create an object for the SPIFFS file system
+SpiffsParticle fs(spiFlash);
+
+void setup() {
+	Serial.begin();
+
+	// Not necessary, though provided here so you can see the serial log messages more easily
+	delay(4000);
+
+	// Initialize SPI flash with a volume size of 256K
+	spiFlash.begin();
+	fs.withPhysicalSize(256 * 1024);
+
+	// Mount the SPIFFS file system
+	s32_t res = fs.mountAndFormatIfNecessary();
+	Log.info("mount res=%d", res);
+
+	if (res == SPIFFS_OK) {
+		// Check the device public and private keys against the file "keys" in the SPIFFS file
+		// system.
+		DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
+		deviceKeyHelper.check();
+	}
+
+	Particle.connect();
+}
+
+void loop() {
+}
+```
+
+The code above has this SPI flash chip selected:
+
+```
+SpiFlashMacronix spiFlash(SPI1, D5);    
+```
+
+This configuration is for the [MX25L8006EM1I-12G](https://www.digikey.com/product-detail/en/macronix/MX25L8006EM1I-12G/1092-1117-ND/2744800), the 0.154", 3.90mm width 8-SOIC package, that fits on the unpopulated pads on the E series module.
+
+![eseries](images/eseries.png)
+
+Here's a Photon with a SPI flash breakout:
+
+![Photon](images/photon.jpg)
+
+
+### P1 using SpiffsParticleRK
+
+You can also use [SpiffsParticleRK](https://github.com/rickkas7/SpiffsParticleRK) with the P1 built-in flash.
+
+See example: more-examples/1-SpiffsParticle-DeviceKeyHelperRK:
+
+```
+#include "Particle.h"
+
+// Make sure you include SpiffsParticleRK.h before DeviceKeyHelperRK.h, otherwise you won't have support for SpiffsParticle
+#include "SpiffsParticleRK.h"
+
+#include "DeviceKeyHelperRK.h"
+
+// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
+SYSTEM_MODE(SEMI_AUTOMATIC);
+
+// Set a reasonable logging level:
+SerialLogHandler logHandler(LOG_LEVEL_WARN, { // Logging level for non-application messages
+    { "app", LOG_LEVEL_INFO }, // Default logging level for all application messages
+    { "app.spiffs", LOG_LEVEL_WARN } // Disable spiffs info and trace messages
+});
+
+// Chose a flash configuration:
+SpiFlashP1 spiFlash;					// P1 external flash inside the P1 module
+
+// Create an object for the SPIFFS file system
+SpiffsParticle fs(spiFlash);
+
+void setup() {
+	Serial.begin();
+
+	// Not necessary, though provided here so you can see the serial log messages more easily
+	delay(4000);
+
+	// Initialize SPI flash with a volume size of 256K
+	spiFlash.begin();
+	fs.withPhysicalSize(1024 * 1024);
+
+	// Mount the SPIFFS file system
+	s32_t res = fs.mountAndFormatIfNecessary();
+	Log.info("mount res=%d", res);
+
+	if (res == SPIFFS_OK) {
+		// Check the device public and private keys against the file "keys" in the SPIFFS file
+		// system.
+		DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
+		deviceKeyHelper.check();
+	}
+
+	Particle.connect();
+}
+
+void loop() {
+}
+
+```
+
+![P1](images/p1.jpg)
+
+### P1 using flashee-eeprom
+
+If you are already using [flashee-eeprom](https://github.com/m-mcgowan/spark-flashee-eeprom/) to store files in the P1 external flash, you can easily add support for saving keys in it as well:
+
+See example: more-examples/4-flashee-eeeprom-DeviceKeyHelperRK:
+
+```
+	FRESULT fResult =  Flashee::Devices::createFATRegion(0, 4096*256, &fs);
+	if (fResult == FR_OK) {
+		// Check the device public and private keys against the keys stored in the file "keys"
+		DeviceKeyHelperFlasheeFile deviceKeyHelper("keys");
+		deviceKeyHelper.check();
+	}
+	else {
+		Log.info("failed to mount flashee file system %d", fResult);
+	}
+```
+
+
+### SdFat
+
+If you are using SdFat, see example more-examples/2-sdfat-DeviceKeyHelperRK:
+
+```
+#include "Particle.h"
+
+// Make sure you include SdFat.h before DeviceKeyHelperRK.h, otherwise you won't have support for SdFat
+#include "SdFat.h"
+
+#include "DeviceKeyHelperRK.h"
+
+// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
+SYSTEM_MODE(SEMI_AUTOMATIC);
+
+// Pick a debug level from one of these two:
+SerialLogHandler logHandler;
+// SerialLogHandler logHandler(LOG_LEVEL_TRACE);
+
+// Primary SPI with DMA
+// SCK => A3, MISO => A4, MOSI => A5, SS => A2 (default)
+SdFat sd;
+const uint8_t chipSelect = A2;
+
+// Secondary SPI with DMA
+// SCK => D4, MISO => D3, MOSI => D2, SS => D1
+// SdFat sd(1);
+// const uint8_t chipSelect = D1;
+
+void setup() {
+	Serial.begin();
+
+	// Not necessary, though provided here so you can see the serial log messages more easily
+	delay(4000);
+
+	if (sd.begin(chipSelect, SPI_HALF_SPEED)) {
+		// Check the device public and private keys against the file "keys" in the SD card file system.
+		DeviceKeyHelperSdFat deviceKeyHelper("keys");
+		deviceKeyHelper.check();
+	}
+	else {
+		Log.info("failed to initialize SD card");
+	}
+
+	Particle.connect();
+}
+
+void loop() {
+}
+```
+
+![SD card](images/sdcard.jpg)
+
+### MB85RC256V I2C FRAM
+
+The MB85RC256V 32 Kbyte ferro-electric non-volatile FRAM is another place you can store your data.
+
+See example: more-examples/3-fram-DeviceKeyHelperRK
+
+```
+#include "Particle.h"
+
+// Make sure you include MB85RC256V-FRAM-RK.h before DeviceKeyHelperRK.h, otherwise you won't have support for MB85RC256V
+#include "MB85RC256V-FRAM-RK.h"
+
+
+#include "DeviceKeyHelperRK.h"
+
+// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
+SYSTEM_MODE(SEMI_AUTOMATIC);
+
+// Pick a debug level from one of these two:
+SerialLogHandler logHandler;
+// SerialLogHandler logHandler(LOG_LEVEL_TRACE);
+
+// MB85RC256V FRAM on Wire (D0/D1) with default address (A0-A2 not connected, which have pull-downs
+MB85RC256V fram(Wire, 0);
+
+void setup() {
+	Serial.begin();
+
+	// Not necessary, though provided here so you can see the serial log messages more easily
+	delay(4000);
+
+	fram.begin();
+	// fram.erase();
+
+	// Check the device public and private keys against the keys stored in FRAM
+	// at offset 1000
+	DeviceKeyHelperFRAM deviceKeyHelper(fram, 1000);
+	deviceKeyHelper.check();
+
+	Particle.connect();
+}
+
+void loop() {
+}
+
+```
+
+![FRAM](images/fram.jpg)
+
+The pins on the Adafruit breakout connect as typical for an I2C device:
+
+- VCC to 3V3 (can also use VIN for a 5V I2C bus)
+- GND to GND
+- WP not connected (connect to VCC to prevent writes to the memory)
+- SCL connect to D1 (SCL) (blue in the picture)
+- SDA connect to D0 (SDA) (green in the picture)
+- A2 not connected. Connect to VCC to change the I2C address. 
+- A1 not connected. Connect to VCC to change the I2C address. 
+- A0 not connected. Connect to VCC to change the I2C address. 
+
+### Adding your own
+
+You can add your own storage medium by subclassing DeviceKeyHelper or calling it directly with the appropriate parameters.
+
+Take, for example, the implementation of the DeviceKeyHelperEEPROM:
+
+```
+class DeviceKeyHelperEEPROM : public DeviceKeyHelper {
+public:
+	/**
+	 * @brief Store data in the onboard emulate EEPROM
+	 *
+	 * @param offset The offset to write to.
+	 */
+	inline DeviceKeyHelperEEPROM(size_t offset) :
+		DeviceKeyHelper([offset](DeviceKeyHelperSavedData *savedData) {
+			// Log.info("getting %u bytes at %u", sizeof(*savedData), offset);
+			EEPROM.get(offset, *savedData);
+			return true;
+		},
+		[offset](const DeviceKeyHelperSavedData *savedData) {
+			// Log.info("saving %u bytes at %u", sizeof(*savedData), offset);
+			EEPROM.put(offset, *savedData);
+			return true;
+		}) {
+	};
+};
+```
+
+Aside from the weird syntax caused by the C++ lambdas, all it does is create two lambda functions. The first has the prototype:
+
+```
+bool load(DeviceKeyHelperSavedData *savedData)
+```
+
+And the nearly identical save:
+
+```
+bool save(const DeviceKeyHelperSavedData *savedData)
+```
+
+You don't have to use lambda functions, you can use plain C callbacks, but the lambda is particularly handy because of the capture. In the EEPROM example, it captures `[offset]` so the load and save functions have access to it.
 
