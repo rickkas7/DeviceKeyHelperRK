@@ -2,7 +2,6 @@
 
 #include "DeviceKeyHelperRK.h"
 
-// This is required, because we reset the keys during setup()
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 SerialLogHandler logHandler;

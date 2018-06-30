@@ -2,18 +2,20 @@
 
 **Warning: This is an early development version of this code and there could still be bugs.**
 
+- Location: https://github.com/rickkas7/DeviceKeyHelperRK
+- License: MIT (Free for use in open-source and closed-source projects, including commercial products.)
 
 ## Background
 
 ### About public key cryptography
 
-Particle devices authenticate with the cloud using public key cryptography. Each side has a public key and a private key. The device private key is only stored on the device but the public key can be shared even over insecure channels. You can share it with everyone, even. The cloud knows every device's public key.
+Particle devices like the Photon and Electron authenticate with the Particle cloud using public key cryptography. Each side has a public key and a private key. The device private key is only stored on the device but the public key can be shared even over insecure channels. You can share it with everyone, even. The cloud knows every device's public key.
 
 For the cloud side, the cloud private key is kept secret, but all devices know the cloud public key. It's publicly available on a web site and in the Particle CLI source. The cloud public key is not a secret.
 
 When a device handshakes, it encrypts some data using the device private key and the cloud public key. The cloud is able to decrypt this because it knows the cloud private key and the device public key (the opposite side). It then sends data back to the device encrypted with the cloud private key and the device public key.
 
-That data can only be decrypted by the device because decrypting it requires the cloud public key an the device private key, and only the device knows the device private key. 
+That data can only be decrypted by the device because decrypting it requires the cloud public key and the device private key, and only the device knows the device private key. 
 
 This process assures that the cloud is who it says it is, not a rogue cloud, because only the real cloud knows its private key. And the cloud knows the device is authentic, because only the device knows its private key.
 
@@ -65,11 +67,11 @@ What if, instead of generating a new, incompatible device private key, you just 
 
 ### Why doesn't the device just do that itself?
 
-The device private key is kind of large and specific to each device. While there's a demo of storing it in the emulated EEPROM, that's not the best location as the ideal location is not in the STM32 flash. Also, it takes over a good chunk of the EEPROM.
+The device private key is kind of large and specific to each device. While there's a demo of storing it in the emulated EEPROM, that's not the best location as the ideal location is not in the STM32 flash. Also, it takes over a good chunk of the EEPROM, especially on the Photon and P1.
 
 Ideally, this requires an external flash (SD card or SPI flash) or something like a FRAM. Since that's not standard equipment, it's not practical to include this in system firmware.
 
-### How it works
+### How the library works
 
 You instantiate an object, usually as a global variable, that specifies the storage medium and other parameters specific to that medium.
 
@@ -97,9 +99,9 @@ You also must do one or both of these things:
 - Use SYSTEM\_MODE(SEMI\_AUTOMATIC)
 - Use SYSTEM\_THREAD(ENABLED)
 
-The reason is that in AUTOMATIC with threading disabled, setup() is never run so the connection monitor won't be started and the keys recovery will never work!
+The reason is that in AUTOMATIC with threading disabled, setup() is not run until successfully connected to the cloud so the connection monitor won't be started and the keys recovery will never work.
 
-When you successfully connect to the cloud, if the key has been changed the new value will be saved in your storage medium. This you do manually particle keys doctor, the new key will be automatically saved.
+When you successfully connect to the cloud, if the key has been changed the new value will be saved in your storage medium. If you manually do a particle keys doctor, the new key will be automatically saved.
 
 If you are using 0.8.0 or later, and a keys error occurs, the key will be restored and the device reset.
 
@@ -116,7 +118,6 @@ The simple example in 1-simple-DeviceKeyHelperRK.cpp stores in EEPROM at a given
 
 #include "DeviceKeyHelperRK.h"
 
-// This is required, because we reset the keys during setup()
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 SerialLogHandler logHandler;
@@ -195,7 +196,6 @@ Using it just requires selecting the correct SPI flash chip and the filename to 
 
 #include "DeviceKeyHelperRK.h"
 
-// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 // Set a reasonable logging level:
@@ -292,7 +292,7 @@ See example: more-examples/4-flashee-eeeprom-DeviceKeyHelperRK:
 
 ### SdFat
 
-If you are using SdFat, see example more-examples/2-sdfat-DeviceKeyHelperRK:
+If you are using [SdFat](https://github.com/greiman/SdFat-Particle), see example more-examples/2-sdfat-DeviceKeyHelperRK:
 
 ```
 #include "Particle.h"
@@ -302,7 +302,6 @@ If you are using SdFat, see example more-examples/2-sdfat-DeviceKeyHelperRK:
 
 #include "DeviceKeyHelperRK.h"
 
-// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 // Pick a debug level from one of these two:
@@ -359,7 +358,6 @@ See example: more-examples/3-fram-DeviceKeyHelperRK
 
 #include "DeviceKeyHelperRK.h"
 
-// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 // Pick a debug level from one of these two:
@@ -448,5 +446,10 @@ And the nearly identical save:
 bool save(const DeviceKeyHelperSavedData *savedData)
 ```
 
+The functions should return true on success or false on error, such as no saved data existing yet.
+
 You don't have to use lambda functions, you can use plain C callbacks, but the lambda is particularly handy because of the capture. In the EEPROM example, it captures `[offset]` so the load and save functions have access to it.
 
+The size of the data to save or load can be found by `sizeof(*savedData)` or `sizeof(DeviceKeyHelperSavedData)`.
+
+When loading data, if the size you have saved is not the same as `sizeof(DeviceKeyHelperSavedData)` you should return false.

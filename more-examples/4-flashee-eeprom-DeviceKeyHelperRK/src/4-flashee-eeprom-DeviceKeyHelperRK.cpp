@@ -9,7 +9,6 @@
 
 #include "DeviceKeyHelperRK.h"
 
-// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 // Pick a debug level from one of these two:
