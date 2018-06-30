@@ -40,11 +40,14 @@ typedef struct {
  * Normally you'll use a class for a specific storage medium like DeviceKeyHelperEEPROM or
  * DeviceKeyHelperSpiffsParticle however you can use this directly or subclass it if you have
  * a different storage method you want to use.
+ *
+ * You normally instantiate one of these as a global variable. It should not be a function
+ * local variable as it needs to stay instantiated for the connection monitor to work.
  */
 class DeviceKeyHelper {
 public:
 	/**
-	 * @brief Constructor
+	 * @brief Constructor. You normally instantiate this is a global variable.
 	 *
 	 * @param load The load lambda or function
 	 *
@@ -64,15 +67,47 @@ public:
 	virtual ~DeviceKeyHelper();
 
 	/**
+	 * @brief Start the connection monitor. Done from setup() typically.
+	 */
+	void startMonitor();
+
+	/**
+	 * @brief The options for check
+	 */
+	enum CheckMode {
+		CHECKMODE_AUTOMATIC, 			//< Check keys, if changed, restore and System.reset.
+		CHECKMODE_AUTOMATIC_NO_RESTART, //< Check keys, if changed, restore and return false, do not System.reset
+		CHECKMODE_CHECK_ONLY, 			//< Check keys, if changed return false but do not restore and do not reset.
+		CHECKMODE_SAVE_CURRENT 			//< Save current keys if changed
+	};
+
+	/**
 	 * @brief Call to check the keys
 	 *
 	 * NOTE: If the keys are swapped back to the saved key, this function will pause, then restart.
 	 *
-	 * @param forceSaveCurrentKey (optional, default: false) If true, the current key will be saved always. This
-	 * is useful if you just changed the device keys (particle keys load or particle keys doctor).
+	 * @param checkMode (optional, default: CHECKMODE_AUTOMATIC) See the CheckMode enum for details.
 	 */
-	void check(bool forceSaveCurrentKey = false);
+	bool check(CheckMode checkMode = CHECKMODE_AUTOMATIC);
 
+	/**
+	 * @brief Get a system diagnostic value
+	 *
+	 * @param id The ID to get such as DIAG_ID_CLOUD_CONNECTION_ERROR_CODE
+	 *
+	 * @param value Filled with that diagnostic value
+	 *
+	 * @return true on success or false if not available
+	 *
+	 * This only works on system firmware 0.8.0 and later. It returns false and 0 for the value if called on
+	 * older system firmware versions.
+	 */
+	static bool getSystemDiagValue(uint16_t id, int32_t &value);
+
+	/**
+	 * @brief Gets the global singleton instance of this class
+	 */
+	static inline DeviceKeyHelper *getInstance() { return instance; };
 
 protected:
 	/**
@@ -87,10 +122,19 @@ protected:
 	 */
 	bool validateData(const DeviceKeyHelperSavedData *savedData) const;
 
+	void eventHandler(system_event_t event, int param);
+
+	static void eventHandlerStatic(system_event_t event, int param);
+
 	static const uint32_t DATA_HEADER_MAGIC = 0x75a65c63;
 
 	std::function<bool(DeviceKeyHelperSavedData *savedData)> load;
 	std::function<bool(const DeviceKeyHelperSavedData *savedData)> save;
+
+	size_t failureCount = 0;
+	bool connected = false;
+
+	static DeviceKeyHelper *instance;
 };
 
 /**

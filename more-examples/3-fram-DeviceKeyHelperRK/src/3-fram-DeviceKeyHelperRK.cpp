@@ -25,20 +25,22 @@ SerialLogHandler logHandler;
 // - A0 not connected. Connect to VCC to change the I2C address.
 MB85RC256V fram(Wire, 0);
 
+// Store the device keys starting at address 1000 in the FRAM
+DeviceKeyHelperFRAM deviceKeyHelper(fram, 1000);
+
+
 void setup() {
 	Serial.begin();
-
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
 
 	fram.begin();
 	// fram.erase();
 
-	// Check the device public and private keys against the keys stored in FRAM
-	// at offset 1000
-	DeviceKeyHelperFRAM deviceKeyHelper(fram, 1000);
-	deviceKeyHelper.check();
+	// Start monitoring for connection failures
+	deviceKeyHelper.startMonitor();
 
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 

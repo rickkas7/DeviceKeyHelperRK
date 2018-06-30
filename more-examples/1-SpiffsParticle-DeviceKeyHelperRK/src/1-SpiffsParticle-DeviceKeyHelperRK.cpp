@@ -24,11 +24,10 @@ SpiFlashMacronix spiFlash(SPI1, D5);	// Macronix flash on SPI1 (D pins), typical
 // Create an object for the SPIFFS file system
 SpiffsParticle fs(spiFlash);
 
+DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
+
 void setup() {
 	Serial.begin();
-
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
 
 	// Initialize SPI flash with a volume size of 256K
 	spiFlash.begin();
@@ -36,15 +35,16 @@ void setup() {
 
 	// Mount the SPIFFS file system
 	s32_t res = fs.mountAndFormatIfNecessary();
-	Log.info("mount res=%d", res);
+	Log.info("mount res=%ld", res);
 
 	if (res == SPIFFS_OK) {
-		// Check the device public and private keys against the file "keys" in the SPIFFS file
-		// system.
-		DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
-		deviceKeyHelper.check();
+		// If the file system was mounted, enable monitoring for keys errors
+		deviceKeyHelper.startMonitor();
 	}
 
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 

@@ -22,21 +22,22 @@ const uint8_t chipSelect = A2;
 // SdFat sd(1);
 // const uint8_t chipSelect = D1;
 
+DeviceKeyHelperSdFat deviceKeyHelper("keys");
+
 void setup() {
 	Serial.begin();
 
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
-
 	if (sd.begin(chipSelect, SPI_HALF_SPEED)) {
-		// Check the device public and private keys against the file "keys" in the SD card file system.
-		DeviceKeyHelperSdFat deviceKeyHelper("keys");
-		deviceKeyHelper.check();
+		// If the file system was mounted, enable monitoring for keys errors
+		deviceKeyHelper.startMonitor();
 	}
 	else {
 		Log.info("failed to initialize SD card");
 	}
 
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 

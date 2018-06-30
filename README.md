@@ -71,12 +71,41 @@ Ideally, this requires an external flash (SD card or SPI flash) or something lik
 
 ### How it works
 
-You insert a few lines of code, typically in setup(). 
+You instantiate an object, usually as a global variable, that specifies the storage medium and other parameters specific to that medium.
 
-If this is the first time you've run with the code, it will save the current key to your selected storage medium.
+For example, for EEPROM, the offset to store at:
 
-On subsequent restarts, it will check the key against the saved one, and if it changed, it will put the other one back, then reset.
+```
+// Save and restore the device keys in EEPROM at offset 100 in the EEPROM
+DeviceKeyHelperEEPROM keyHelper(100);
+```
 
+Or for SdFat, the filename to store in:
+
+```
+DeviceKeyHelperSdFat deviceKeyHelper("keys");
+```
+
+Then in setup() you start monitoring:
+
+```
+deviceKeyHelper.startMonitor();
+```
+
+You also must do one or both of these things:
+
+- Use SYSTEM_MODE(SEMI_AUTOMATIC)
+- Use SYSTEM_THREAD(ENABLED)
+
+The reason is that in AUTOMATIC with threading disabled, setup() is never run so the connection monitor won't be started and the keys recovery will never work!
+
+When you successfully connect to the cloud, if the key has been changed the new value will be saved in your storage medium.
+
+If you are using 0.8.0 or later, and a keys error occurs, the key will be restored and the device reset.
+
+If you are using an earlier system firmware version, after three failed connections in a row, the key will be restored and the device reset. This is because there's no way to get the connection error prior to 0.8.0.
+
+A minimum system firmware version of 0.6.1 is required as the cloud connection system events are used internally.
 
 ### Simple Example
 
@@ -91,20 +120,19 @@ The simple example in 1-simple-DeviceKeyHelperRK.cpp stores in EEPROM at a given
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 SerialLogHandler logHandler;
+//SerialLogHandler logHandler(LOG_LEVEL_TRACE);
+
+// Save and restore the device keys in EEPROM at offset 100 in the EEPROM
+DeviceKeyHelperEEPROM deviceKeyHelper(100);
 
 void setup() {
 
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
+	// You must call this from setup to start monitoring for keys errors
+	deviceKeyHelper.startMonitor();
 
-	// Save and restore the device keys in EEPROM at offset 100 in the EEPROM
-	DeviceKeyHelperEEPROM keyHelper(100);
-	keyHelper.check();
-
-	// Wait until the keys have possibly been restored before trying to connect.
-	// In SEMI_AUTOMATIC mode, connection retries and everything like that will
-	// work just like AUTOMATIC after you do the Particle.connect once, no need
-	// to manually manage the connection.
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 
@@ -114,11 +142,10 @@ void loop() {
 
 ```
 
-The only real code is this:
+The only real code is allocation of the deviceKeyHelper object:
 
 ```
-	DeviceKeyHelperEEPROM keyHelper(100);
-	keyHelper.check();
+DeviceKeyHelperEEPROM deviceKeyHelper(100);
 ```
 
 This uses the built-in EEPROM emulation and saves and restores the keys to offset 100. 
@@ -128,10 +155,10 @@ The size of the data depends on the type of device:
 - For Wi-Fi devices (Photon, P1): 1608 bytes
 - For cellular devices (Electron, E series): 328 bytes
 
-If you ever need to overwrite the currently saved key, you can do that by:
+And you need to start the monitor from setup();
 
 ```
-	keyHelper.check(true);
+	deviceKeyHelper.startMonitor();
 ```
 
 
@@ -187,11 +214,10 @@ SpiFlashMacronix spiFlash(SPI1, D5);	// Macronix flash on SPI1 (D pins), typical
 // Create an object for the SPIFFS file system
 SpiffsParticle fs(spiFlash);
 
+DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
+
 void setup() {
 	Serial.begin();
-
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
 
 	// Initialize SPI flash with a volume size of 256K
 	spiFlash.begin();
@@ -199,15 +225,16 @@ void setup() {
 
 	// Mount the SPIFFS file system
 	s32_t res = fs.mountAndFormatIfNecessary();
-	Log.info("mount res=%d", res);
+	Log.info("mount res=%ld", res);
 
 	if (res == SPIFFS_OK) {
-		// Check the device public and private keys against the file "keys" in the SPIFFS file
-		// system.
-		DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
-		deviceKeyHelper.check();
+		// If the file system was mounted, enable monitoring for keys errors
+		deviceKeyHelper.startMonitor();
 	}
 
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 
@@ -236,56 +263,10 @@ You can also use [SpiffsParticleRK](https://github.com/rickkas7/SpiffsParticleRK
 
 See example: more-examples/1-SpiffsParticle-DeviceKeyHelperRK:
 
+This is the same as the previous example, except you use this device:
+
 ```
-#include "Particle.h"
-
-// Make sure you include SpiffsParticleRK.h before DeviceKeyHelperRK.h, otherwise you won't have support for SpiffsParticle
-#include "SpiffsParticleRK.h"
-
-#include "DeviceKeyHelperRK.h"
-
-// Note: You should use SEMI_AUTOMATIC mode so the check for valid keys can be done before connecting.
-SYSTEM_MODE(SEMI_AUTOMATIC);
-
-// Set a reasonable logging level:
-SerialLogHandler logHandler(LOG_LEVEL_WARN, { // Logging level for non-application messages
-    { "app", LOG_LEVEL_INFO }, // Default logging level for all application messages
-    { "app.spiffs", LOG_LEVEL_WARN } // Disable spiffs info and trace messages
-});
-
-// Chose a flash configuration:
 SpiFlashP1 spiFlash;					// P1 external flash inside the P1 module
-
-// Create an object for the SPIFFS file system
-SpiffsParticle fs(spiFlash);
-
-void setup() {
-	Serial.begin();
-
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
-
-	// Initialize SPI flash with a volume size of 256K
-	spiFlash.begin();
-	fs.withPhysicalSize(1024 * 1024);
-
-	// Mount the SPIFFS file system
-	s32_t res = fs.mountAndFormatIfNecessary();
-	Log.info("mount res=%d", res);
-
-	if (res == SPIFFS_OK) {
-		// Check the device public and private keys against the file "keys" in the SPIFFS file
-		// system.
-		DeviceKeyHelperSpiffsParticle deviceKeyHelper(fs, "keys");
-		deviceKeyHelper.check();
-	}
-
-	Particle.connect();
-}
-
-void loop() {
-}
-
 ```
 
 ![P1](images/p1.jpg)
@@ -299,13 +280,13 @@ See example: more-examples/4-flashee-eeeprom-DeviceKeyHelperRK:
 ```
 	FRESULT fResult =  Flashee::Devices::createFATRegion(0, 4096*256, &fs);
 	if (fResult == FR_OK) {
-		// Check the device public and private keys against the keys stored in the file "keys"
-		DeviceKeyHelperFlasheeFile deviceKeyHelper("keys");
-		deviceKeyHelper.check();
+		// Start monitoring for connection failures
+		deviceKeyHelper.startMonitor();
 	}
 	else {
 		Log.info("failed to mount flashee file system %d", fResult);
 	}
+
 ```
 
 
@@ -338,21 +319,22 @@ const uint8_t chipSelect = A2;
 // SdFat sd(1);
 // const uint8_t chipSelect = D1;
 
+DeviceKeyHelperSdFat deviceKeyHelper("keys");
+
 void setup() {
 	Serial.begin();
 
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
-
 	if (sd.begin(chipSelect, SPI_HALF_SPEED)) {
-		// Check the device public and private keys against the file "keys" in the SD card file system.
-		DeviceKeyHelperSdFat deviceKeyHelper("keys");
-		deviceKeyHelper.check();
+		// If the file system was mounted, enable monitoring for keys errors
+		deviceKeyHelper.startMonitor();
 	}
 	else {
 		Log.info("failed to initialize SD card");
 	}
 
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 
@@ -385,22 +367,25 @@ SerialLogHandler logHandler;
 // SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 
 // MB85RC256V FRAM on Wire (D0/D1) with default address (A0-A2 not connected, which have pull-downs
+// on the Adafruit breakout board)
 MB85RC256V fram(Wire, 0);
+
+// Store the device keys starting at address 1000 in the FRAM
+DeviceKeyHelperFRAM deviceKeyHelper(fram, 1000);
+
 
 void setup() {
 	Serial.begin();
 
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
-
 	fram.begin();
 	// fram.erase();
 
-	// Check the device public and private keys against the keys stored in FRAM
-	// at offset 1000
-	DeviceKeyHelperFRAM deviceKeyHelper(fram, 1000);
-	deviceKeyHelper.check();
+	// Start monitoring for connection failures
+	deviceKeyHelper.startMonitor();
 
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 

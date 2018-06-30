@@ -19,24 +19,24 @@ SerialLogHandler logHandler;
 // The flashee FAT file system
 FATFS fs;
 
+// Check the device public and private keys against the keys stored in the file "keys"
+DeviceKeyHelperFlasheeFile deviceKeyHelper("keys");
 
 void setup() {
 	Serial.begin();
 
-	// Not necessary, though provided here so you can see the serial log messages more easily
-	delay(4000);
-
 	FRESULT fResult =  Flashee::Devices::createFATRegion(0, 4096*256, &fs);
 	if (fResult == FR_OK) {
-		// Check the device public and private keys against the keys stored in the file "keys"
-		DeviceKeyHelperFlasheeFile deviceKeyHelper("keys");
-		deviceKeyHelper.check();
+		// Start monitoring for connection failures
+		deviceKeyHelper.startMonitor();
 	}
 	else {
 		Log.info("failed to mount flashee file system %d", fResult);
 	}
 
-
+	// You either need to use SYSTEM_THREAD(ENABLED) or SYSTEM_MODE(SEMI_AUTOMATIC) because
+	// in thread disabled AUTOMATIC mode, setup() isn't called until cloud connected and the
+	// code to monitor the connection would never be started via startMonitor().
 	Particle.connect();
 }
 
