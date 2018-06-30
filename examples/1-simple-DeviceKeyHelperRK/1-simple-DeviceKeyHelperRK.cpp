@@ -9,6 +9,9 @@ SerialLogHandler logHandler;
 //SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 
 // Save and restore the device keys in EEPROM at offset 100 in the EEPROM
+// The amount os space used at that offset depends on the device:
+// - For Wi-Fi devices (Photon, P1): 1608 bytes
+// - For cellular devices (Electron, E series): 328 bytes
 DeviceKeyHelperEEPROM deviceKeyHelper(100);
 
 void setup() {

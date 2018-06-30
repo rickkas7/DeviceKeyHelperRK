@@ -17,7 +17,7 @@ That data can only be decrypted by the device because decrypting it requires the
 
 This process assures that the cloud is who it says it is, not a rogue cloud, because only the real cloud knows its private key. And the cloud knows the device is authentic, because only the device knows its private key.
 
-And a third-party snooping on the process can't gain anything because the private keys never leave the respective sides.
+And a third-party snooping on the process can't gain anything because the private keys never leave the respective sides. A man-in-the-middle can't hijack or spoof either side because he wouldn't know the private keys.
 
 This process requires a lot of computation, and is only used to authenticate both sides and set up a session key to encrypt the data for the connection using fast symmetric encryption like AES.
 
@@ -94,12 +94,12 @@ deviceKeyHelper.startMonitor();
 
 You also must do one or both of these things:
 
-- Use SYSTEM_MODE(SEMI_AUTOMATIC)
-- Use SYSTEM_THREAD(ENABLED)
+- Use SYSTEM\_MODE(SEMI\_AUTOMATIC)
+- Use SYSTEM\_THREAD(ENABLED)
 
 The reason is that in AUTOMATIC with threading disabled, setup() is never run so the connection monitor won't be started and the keys recovery will never work!
 
-When you successfully connect to the cloud, if the key has been changed the new value will be saved in your storage medium.
+When you successfully connect to the cloud, if the key has been changed the new value will be saved in your storage medium. This you do manually particle keys doctor, the new key will be automatically saved.
 
 If you are using 0.8.0 or later, and a keys error occurs, the key will be restored and the device reset.
 
