@@ -9,7 +9,7 @@
 
 ### About public key cryptography
 
-Particle devices like the Photon and Electron authenticate with the Particle cloud using public key cryptography. Each side has a public key and a private key. The device private key is only stored on the device but the public key can be shared even over insecure channels. You can share it with everyone, even. The cloud knows every device's public key.
+Particle devices like the Photon and Electron authenticate with the Particle cloud using public key cryptography. Each side has a public key and a private key. The device private key is only stored on the device but the public key can be shared even over insecure channels. You can share it with everyone, even. The Particle cloud knows every device's public key.
 
 For the cloud side, the cloud private key is kept secret, but all devices know the cloud public key. It's publicly available on a web site and in the Particle CLI source. The cloud public key is not a secret.
 
@@ -96,7 +96,7 @@ deviceKeyHelper.startMonitor();
 
 You also must do one or both of these things:
 
-- Use SYSTEM\_MODE(SEMI\_AUTOMATIC)
+- Use SYSTEM\_MODE(SEMI\_AUTOMATIC) or SYSTEM\_MODE(MANUAL)
 - Use SYSTEM\_THREAD(ENABLED)
 
 The reason is that in AUTOMATIC with threading disabled, setup() is not run until successfully connected to the cloud so the connection monitor won't be started and the keys recovery will never work.
@@ -121,7 +121,6 @@ The simple example in 1-simple-DeviceKeyHelperRK.cpp stores in EEPROM at a given
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 SerialLogHandler logHandler;
-//SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 
 // Save and restore the device keys in EEPROM at offset 100 in the EEPROM
 DeviceKeyHelperEEPROM deviceKeyHelper(100);
