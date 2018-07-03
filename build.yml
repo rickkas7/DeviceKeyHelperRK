@@ -1,0 +1,14 @@
+- build: examples/1-simple-DeviceKeyHelperRK
+  photon: [0.6.3, 0.7.0, 0.8.0-rc.8]
+  p1: [latest]
+  electron: [latest]
+- build: more-examples/1-SpiffsParticle-DeviceKeyHelperRK
+  photon: [latest]
+- build: more-examples/2-sdfat-DeviceKeyHelperRK
+  photon: [latest]
+- build: more-examples/3-fram-DeviceKeyHelperRK
+  photon: [latest]
+- build: more-examples/4-flashee-eeprom-DeviceKeyHelperRK
+  p1: [latest]
+
+   
