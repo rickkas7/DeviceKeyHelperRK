@@ -167,6 +167,11 @@ void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 						log.warn("keys error, resetting keys if possible");
 						Particle.disconnect();
 						check(CheckMode::CHECKMODE_AUTOMATIC);
+
+						// Normally this line won't be reached because check does a restart if keys
+						// are restored, but this is here in case the restore fails, so the device
+						// won't be left in disconnected state.
+						System.reset();
 					}
 				}
 #endif
@@ -179,6 +184,11 @@ void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 					log.warn("possible keys error, resetting keys if possible");
 					Particle.disconnect();
 					check(CheckMode::CHECKMODE_AUTOMATIC);
+
+					// Normally this line won't be reached because check does a restart if keys
+					// are restored, but this is here in case the restore fails, so the device
+					// won't be left in disconnected state.
+					System.reset();
 				}
 			}
 		}
