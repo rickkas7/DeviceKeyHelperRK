@@ -174,8 +174,7 @@ void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 						System.reset();
 					}
 				}
-#endif
-
+#else
 				failureCount++;
 				log.info("failed to connect %d", failureCount);
 
@@ -190,6 +189,8 @@ void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 					// won't be left in disconnected state.
 					System.reset();
 				}
+#endif
+
 			}
 		}
 

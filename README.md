@@ -452,3 +452,14 @@ You don't have to use lambda functions, you can use plain C callbacks, but the l
 The size of the data to save or load can be found by `sizeof(*savedData)` or `sizeof(DeviceKeyHelperSavedData)`.
 
 When loading data, if the size you have saved is not the same as `sizeof(DeviceKeyHelperSavedData)` you should return false.
+
+## Release History
+
+### 0.0.4 (2019-04-29)
+
+This version fixes a problem that prevents the cellular modem from being reset properly in certain 
+cases in 0.8.0 and later. The fallback code from 0.7.0 was executed in addition to actually checking 
+for a keys error, and this can prevent the cellular modem from being power cycled after a number 
+of connection failures when the keys are already correct.
+
+
