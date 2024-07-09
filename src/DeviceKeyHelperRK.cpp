@@ -7,7 +7,7 @@
 
 #include "DeviceKeyHelperRK.h"
 
-static Logger log("app.devicekeys");
+static Logger _log("app.devicekeys");
 
 DeviceKeyHelper *DeviceKeyHelper::instance;
 
@@ -45,7 +45,7 @@ bool DeviceKeyHelper::check(CheckMode checkMode) {
 				if (validateData(saved)) {
 					// Looks valid
 					if (checkMode == CHECKMODE_SAVE_CURRENT) {
-						log.trace("force save device keys");
+						_log.trace("force save device keys");
 						saveKeys = true;
 					}
 					else
@@ -54,32 +54,32 @@ bool DeviceKeyHelper::check(CheckMode checkMode) {
 						if (checkMode != CHECKMODE_CHECK_ONLY) {
 							int res = dct_write_app_data(saved->keys, DEVICE_KEYS_HELPER_OFFSET, DEVICE_KEYS_HELPER_SIZE);
 
-							log.info("device keys changed! reverting offset=%u size=%u result=%d", DEVICE_KEYS_HELPER_OFFSET, DEVICE_KEYS_HELPER_SIZE, res);
+							_log.info("device keys changed! reverting offset=%u size=%u result=%d", DEVICE_KEYS_HELPER_OFFSET, DEVICE_KEYS_HELPER_SIZE, res);
 
 							if (checkMode != CHECKMODE_AUTOMATIC_NO_RESTART) {
 								System.reset();
 							}
 						}
 						else {
-							log.info("device keys changed");
+							_log.info("device keys changed");
 						}
 						result = false;
 					}
 					else {
 						// Same
-						log.info("device keys unchanged");
+						_log.info("device keys unchanged");
 					}
 				}
 				else {
 					// Not valid, just save the current keys
-					log.info("was able to load device keys, but data was not valid");
+					_log.info("was able to load device keys, but data was not valid");
 					saveKeys = true;
 				}
 
 			}
 			else {
 				// Did not successfully load, so save the current key instead
-				log.info("was unable to load existing key data");
+				_log.info("was unable to load existing key data");
 				saveKeys = true;
 			}
 
@@ -89,14 +89,14 @@ bool DeviceKeyHelper::check(CheckMode checkMode) {
 					saved->sum == calculateChecksum(saved) &&
 					memcmp(saved->keys, onDevice, DEVICE_KEYS_HELPER_SIZE) == 0) {
 					//
-					log.trace("keys unchanged, no need to save");
+					_log.trace("keys unchanged, no need to save");
 					saveKeys = false;
 				}
 			}
 
 			if (saveKeys) {
 				// Save a header (with magic bytes, length, and checksum)
-				log.info("saving keys");
+				_log.info("saving keys");
 				memcpy(saved->keys, onDevice, DEVICE_KEYS_HELPER_SIZE);
 
 				saved->magic = DATA_HEADER_MAGIC;
@@ -127,12 +127,12 @@ uint16_t DeviceKeyHelper::calculateChecksum(const DeviceKeyHelperSavedData *save
 bool DeviceKeyHelper::validateData(const DeviceKeyHelperSavedData *savedData) const {
 
 	if (savedData->magic != DATA_HEADER_MAGIC || savedData->size != DEVICE_KEYS_HELPER_SIZE) {
-		log.info("bad magic bytes or size magic=%08lx size=%u", savedData->magic, savedData->size);
+		_log.info("bad magic bytes or size magic=%08lx size=%u", savedData->magic, savedData->size);
 		return false;
 	}
 
 	if (savedData->sum != calculateChecksum(savedData)) {
-		log.info("bad checksum");
+		_log.info("bad checksum");
 		return false;
 	}
 	return true;
@@ -141,12 +141,12 @@ bool DeviceKeyHelper::validateData(const DeviceKeyHelperSavedData *savedData) co
 void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 	if (event == cloud_status) {
 		if (param == cloud_status_connecting) {
-			log.trace("cloud_status_connecting");
+			_log.trace("cloud_status_connecting");
 			connected = false;
 		}
 		else
 		if (param == cloud_status_connected) {
-			log.trace("cloud_status_connected");
+			_log.trace("cloud_status_connected");
 
 			connected = true;
 			failureCount = 0;
@@ -154,17 +154,17 @@ void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 		}
 		else
 		if (param == cloud_status_disconnected) {
-			log.trace("cloud_status_disconnected");
+			_log.trace("cloud_status_disconnected");
 
 			if (!connected) {
 #if SYSTEM_VERSION >= 0x00080000
 				int32_t value;
 				if (getSystemDiagValue(DIAG_ID_CLOUD_CONNECTION_ERROR_CODE, value)) {
-					log.trace("DIAG_ID_CLOUD_CONNECTION_ERROR_CODE=%ld", value);
+					_log.trace("DIAG_ID_CLOUD_CONNECTION_ERROR_CODE=%ld", value);
 
 					if (value == 26 || value == 10) {
 						// Keys error. It's 26 on TCP devices and 10 on UDP devices.
-						log.warn("keys error, resetting keys if possible");
+						_log.warn("keys error, resetting keys if possible");
 						Particle.disconnect();
 						check(CheckMode::CHECKMODE_AUTOMATIC);
 
@@ -176,11 +176,11 @@ void DeviceKeyHelper::eventHandler(system_event_t event, int param) {
 				}
 #else
 				failureCount++;
-				log.info("failed to connect %d", failureCount);
+				_log.info("failed to connect %d", failureCount);
 
 				if (failureCount >= 3) {
 					// If this happens more than 3 times, assume we have a keys error
-					log.warn("possible keys error, resetting keys if possible");
+					_log.warn("possible keys error, resetting keys if possible");
 					Particle.disconnect();
 					check(CheckMode::CHECKMODE_AUTOMATIC);
 
@@ -234,7 +234,7 @@ bool DeviceKeyHelper::getSystemDiagValue(uint16_t id, int32_t &value) {
 
     system_format_diag_data(&id, 1, 1, Callback.appender, &data, nullptr);
 
-    // Log.info("idSize=%u valueSize=%u id=%u value=%ld", data.d.idSize, data.d.valueSize, data.d.id, data.d.value);
+    // _log.info("idSize=%u valueSize=%u id=%u value=%ld", data.d.idSize, data.d.valueSize, data.d.id, data.d.value);
 
     value = data.d.value;
 
